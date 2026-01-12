@@ -1,11 +1,13 @@
 import json
-import threading
+import logging
+from concurrent.futures import ThreadPoolExecutor
 import tkinter as tk
 from tkinter import ttk, messagebox
 
 from rustore.config import get_settings
 from rustore.token_manager import RuStoreTokenManager
 from rustore.api_client import RuStoreApiClient
+from rustore.service import RuStoreService
 from rustore.methods import load_all, list_methods, MethodDef
 
 
@@ -149,6 +151,23 @@ class Tooltip:
             self._tip = None
 
 
+class TkLogHandler(logging.Handler):
+    def __init__(self, root: tk.Tk, widget: tk.Text):
+        super().__init__()
+        self.root = root
+        self.widget = widget
+
+    def emit(self, record: logging.LogRecord):
+        msg = self.format(record)
+        self.root.after(0, self._append, msg)
+
+    def _append(self, msg: str):
+        if not self.widget.winfo_exists():
+            return
+        self.widget.insert(tk.END, msg + "\n")
+        self.widget.see(tk.END)
+
+
 # ---------------- UI helpers: scrolled widgets ----------------
 def make_scrolled_text(parent, *, wrap_mode: str = "word"):
     """
@@ -245,22 +264,33 @@ class App(tk.Tk):
         self.path_entries = {}
         self.query_entries = {}
 
-        self._build_ui()
+        self.executor = ThreadPoolExecutor(max_workers=4)
 
-        # after UI exists, init services with logger
-        self.tm = RuStoreTokenManager(self.settings, logger=self.log)
-        self.client = RuStoreApiClient(self.settings, self.tm, logger=self.log)
+        self._build_ui()
+        self._setup_logging()
+
+        self.tm = RuStoreTokenManager(self.settings, logger=self.logger)
+        self.client = RuStoreApiClient(self.settings, self.tm, logger=self.logger)
+        self.service = RuStoreService(self.client)
 
         self._populate_methods_tree()
         self._on_method_change()
 
         # set a sane initial split so the "Вызвать метод" button is always visible
         self.after(0, self._set_initial_sash)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # -------- logging --------
-    def log(self, msg: str):
-        self.log_view.insert(tk.END, msg + "\n")
-        self.log_view.see(tk.END)
+    def _setup_logging(self):
+        self.logger = logging.getLogger("rustore.app")
+        self.logger.setLevel(logging.INFO)
+        self.logger.handlers.clear()
+        self.logger.propagate = False
+
+        handler = TkLogHandler(self, self.log_view)
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
+        self.logger.addHandler(handler)
 
     def _copy_text_widget_all(self, w: tk.Text):
         txt = w.get("1.0", tk.END).rstrip("\n")
@@ -354,7 +384,8 @@ class App(tk.Tk):
         call_row = ttk.Frame(upper)
         call_row.pack(fill="x", pady=(0, 10))
 
-        ttk.Button(call_row, text="Вызвать метод", command=self._call_clicked).pack(side="left")
+        self.call_button = ttk.Button(call_row, text="Вызвать метод", command=self._call_clicked)
+        self.call_button.pack(side="left")
         ttk.Checkbutton(call_row, text="Pretty JSON", variable=self.pretty_var).pack(side="left", padx=12)
 
         # Lower: response + logs
@@ -529,10 +560,6 @@ class App(tk.Tk):
             return
 
         env = self.env_var.get()
-        path_template = (m.paths or {}).get(env)
-        if not path_template:
-            messagebox.showerror("Ошибка", f"Для окружения '{env}' не задан путь в methods.yaml")
-            return
 
         try:
             path_params, miss1 = self._collect_params(self.path_entries, "path")
@@ -556,12 +583,13 @@ class App(tk.Tk):
         self.status.config(text="Выполняю запрос... (см. Logs)")
         self.pretty_view.delete("1.0", tk.END)
         self.raw_view.delete("1.0", tk.END)
+        self._set_call_state(True)
 
         def worker():
             try:
-                resp, url = self.client.call(
-                    m.http_method,
-                    path_template,
+                resp, url = self.service.call_method(
+                    m,
+                    env,
                     path_params=path_params,
                     query_params=query_params,
                     body=body if body else None,
@@ -569,8 +597,10 @@ class App(tk.Tk):
                 self.after(0, lambda: self._show_response(resp, url))
             except Exception as e:
                 self.after(0, lambda: self._show_error(e))
+            finally:
+                self.after(0, lambda: self._set_call_state(False))
 
-        threading.Thread(target=worker, daemon=True).start()
+        self.executor.submit(worker)
 
     def _show_response(self, resp, url: str):
         self.status.config(text=f"{resp.status_code}  URL: {url}")
@@ -595,6 +625,15 @@ class App(tk.Tk):
     def _show_error(self, e: Exception):
         self.status.config(text="Ошибка запроса (см. Logs)")
         messagebox.showerror("Ошибка", str(e))
+
+    def _set_call_state(self, busy: bool):
+        if not self.call_button.winfo_exists():
+            return
+        self.call_button.configure(state="disabled" if busy else "normal")
+
+    def _on_close(self):
+        self.executor.shutdown(wait=False, cancel_futures=True)
+        self.destroy()
 
 
 if __name__ == "__main__":
