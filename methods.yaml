@@ -1,0 +1,252 @@
+groups:
+  mon_actual:
+    title: "Монетизация ACTUAL"
+    methods:
+
+      full_refund:
+        title: "Полный возврат средств"
+        http_method: "PATCH"
+        paths:
+          prod: "/public/applications/{appId}/invoices/{invoiceId}"
+        params:
+          path:
+            appId: { type: "int", required: true }
+            invoiceId: { type: "str", required: true }
+          query: { }
+          body: { }
+
+      invoice_v2:
+        title: "Получение инфо по invoice id (actual)"
+        http_method: "GET"
+        paths:
+          prod: "/public/v2/purchase/{invoiceId}"
+          sandbox: "/public/sandbox/v2/purchase/{invoiceId}"
+        params:
+          path:
+            invoiceId: { type: "str", required: true }
+          query: { }
+          body: { }
+
+      confirm_purchase:
+        title: "Подтверждение покупки"
+        http_method: "PUT"
+        paths:
+          prod: "/public/applications/{appId}/purchases/{purchaseId}:confirm"
+          sandbox: "/public/sandbox/applications/{appId}/purchases/{purchaseId}:confirm"
+        params:
+          path:
+            appId: {type: "int", required: true}
+            purchaseId: {type: "str", required: true}
+          query: {}
+          body: {}
+
+      cancel_purchase:
+        title: "Отмена покупки"
+        http_method: "PUT"
+        paths:
+          prod: "/public/applications/{appId}/purchases/{purchaseId}:cancel"
+          sandbox: "/public/sandbox/applications/{appId}/purchases/{purchaseId}:cancel"
+        params:
+          path:
+            appId: {type: "int", required: true}
+            purchaseId: {type: "str", required: true}
+          query: {}
+          body: {}
+
+      purchases_by_app_user:
+        title: "Список покупок по appUserId"
+        http_method: "GET"
+        paths:
+          prod: "/public/applications/{appId}/purchases"
+          sandbox: "/public/sandbox/applications/{appId}/purchases"
+        params:
+          path:
+            appId: {type: "str", required: true}
+          query:
+            appUserId: {type: "str", required: true}
+            purchaseStatus: {type: "str", required: false}
+            continuation: {type: "str", required: false}
+            limit: {type: "int", required: false}
+          body: {}
+
+      subscription_data_v4:
+        title: "Получение данных подписки (V4)"
+        http_method: "GET"
+        paths:
+          prod: "/public/v4/subscription/{packageName}/{subscriptionId}/{purchaseId}"
+          sandbox: "/public/sandbox/v4/subscription/{packageName}/{subscriptionId}/{purchaseId}"
+        params:
+          path:
+            packageName: {type: "str", required: true}
+            subscriptionId: {type: "str", required: true}
+            purchaseId: {type: "str", required: true}
+          query: {}
+          body: {}
+
+      subscription_ack_v2:
+        title: "Подтверждение подписки acknowledge (V2) "
+        http_method: "POST"
+        paths:
+          prod: "/public/v2/subscription/{packageName}/{subscriptionId}/{purchaseId}:acknowledge"
+          sandbox: "/public/sandbox/v2/subscription/{packageName}/{subscriptionId}/{purchaseId}:acknowledge"
+        params:
+          path:
+            packageName: {type: "str", required: true}
+            subscriptionId: {type: "str", required: true}
+            purchaseId: {type: "str", required: true}
+          query: {}
+          body: {}
+
+      cancel_subscription:
+        title: "Отмена подписки по purchaseId"
+        http_method: "PATCH"
+        paths:
+          prod: "/public/v1/applications/{appId}/subscriptions/{purchaseId}:cancel"
+          sandbox: "/public/sandbox/v1/applications/{appId}/subscriptions/{purchaseId}:cancel"
+        params:
+          path:
+            appId: {type: "int", required: true}
+            purchaseId: {type: "str", required: true}
+          query: {}
+          body: {}
+
+      invoices_list_by_date:
+        title: "Список платежей за дату"
+        http_method: "GET"
+        paths:
+          prod: "/public/applications/{appId}/invoices"
+          sandbox: "/public/sandbox/applications/{appId}/invoices"
+        params:
+          path:
+            appId: {type: "int", required: true}
+          query:
+            invoiceStatuses: {type: "list[str]", required: false, hint: "через запятую"}
+            dateFrom: {type: "str", required: false, hint: "уточните параметр в доке"}
+            dateTo: {type: "str", required: false, hint: "уточните параметр в доке"}
+            continuationToken: {type: "str", required: false}
+            limit: {type: "int", required: false}
+          body: {}
+
+      catalog_products:
+        title: "Список продуктов"
+        http_method: "GET"
+        paths:
+          prod: "/public/applications/{appId}/catalog/products"
+        params:
+          path:
+            appId: {type: "int", required: true}
+          query:
+            productId: {type: "str", required: false}
+            productType: {type: "list[str]", required: true, hint: "consumable, non-consumable"}
+            status: {type: "list[str]", required: false, hint: "active, inactive"}
+            continuationToken: {type: "str", required: false}
+            limit: {type: "int", required: false}
+          body: {}
+
+      catalog_subscriptions:
+        title: "Список подписок (каталог)"
+        http_method: "GET"
+        paths:
+          prod: "/public/applications/{appId}/catalog/subscriptions"
+        params:
+          path:
+            appId: {type: "int", required: true}
+          query:
+            subscriptionId: {type: "str", required: false}
+            status: {type: "list[str]", required: false, hint: "active, inactive"}
+            continuationToken: {type: "str", required: false}
+            limit: {type: "int", required: false}
+          body: {}
+
+  mon_deprecated:
+    title: "Монетизация DEPRECATED"
+    methods:
+
+      payment_by_invoiceid_deprecated:
+        title: "Получение платежа по invoiceId [DEPRECATED]"
+        http_method: "GET"
+        paths:
+          prod: "/public/purchase"
+          sandbox: "/public/sandbox/purchase"
+        params:
+          path: { }
+          query:
+            invoiceId: { type: "int", required: true }
+          body: { }
+
+      subscription_data_v3:
+        title: "Получение данных подписки (V3)"
+        http_method: "GET"
+        paths:
+          prod: "/public/v3/subscription/{packageName}/{subscriptionId}/{subscriptionToken}"
+          sandbox: "/public/sandbox/v3/subscription/{packageName}/{subscriptionId}/{subscriptionToken}"
+        params:
+          path:
+            packageName: { type: "str", required: true }
+            subscriptionId: { type: "str", required: true }
+            subscriptionToken: { type: "str", required: true }
+          query: { }
+          body: { }
+
+      subscription_data_v2:
+        title: "Получение данных подписки (V2)"
+        http_method: "GET"
+        paths:
+          prod: "/public/glike/subscription/{packageName}/{subscriptionId}/{subscriptionToken}"
+        params:
+          path:
+            packageName: { type: "str", required: true }
+            subscriptionId: { type: "str", required: true }
+            subscriptionToken: { type: "str", required: true }
+          query: { }
+          body: { }
+
+      payment_by_token_deprecated:
+        title: "Получение платежа по purchaseToken [DEPRECATED]"
+        http_method: "GET"
+        paths:
+          prod: "/public/purchase/{purchaseToken}"
+          sandbox: "/public/sandbox/purchase/{purchaseToken}"
+        params:
+          path:
+            purchaseToken: { type: "str", required: true }
+          query: { }
+          body: { }
+
+      subscription_ack:
+        title: "Подтверждение подписки acknowledge"
+        http_method: "POST"
+        paths:
+          prod: "/public/glike/subscription/{packageName}/{subscriptionId}/{subscriptionToken}:acknowledge"
+          sandbox: "/public/sandbox/glike/subscription/{packageName}/{subscriptionId}/{subscriptionToken}:acknowledge"
+        params:
+          path:
+            packageName: { type: "str", required: true }
+            subscriptionId: { type: "str", required: true }
+            subscriptionToken: { type: "str", required: true }
+          query: { }
+          body: { }
+
+        subscription_data:
+          title: "Получение данных подписки"
+          http_method: "GET"
+          paths:
+            prod: "/public/subscription/{subscriptionToken}"
+            sandbox: "/public/sandbox/subscription/{subscriptionToken}"
+          params:
+            path:
+              subscriptionToken: { type: "str", required: true }
+            query: { }
+            body: { }
+
+        subscription_status:
+          title: "Получение статуса подписки"
+          http_method: "GET"
+          paths:
+            prod: "/public/subscription/{subscriptionToken}/state"
+            sandbox: "/public/sandbox/subscription/{subscriptionToken}/state"
+          params:
+            path:
+              subscriptionToken: { type: "str", required: true }
+            query: { }
+            body: { }

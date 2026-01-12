@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Build artifacts
+dist/
+build/
+*.spec
+
+# Env
+.env
