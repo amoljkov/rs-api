@@ -3,6 +3,23 @@ groups:
     title: "Монетизация ACTUAL"
     methods:
 
+      web_payment_link:
+        title: "Платежная ссылка для web оплат"
+        http_method: "POST"
+        paths:
+          prod: "/v1/monetization/external/app/{appId}/payment"
+        params:
+          path:
+            appId: { type: "int", required: true }
+          query: { }
+          body:
+            productCode: { type: "str", required: true }
+            quantity: { type: "int", required: false }
+            orderId: { type: "str", required: true }
+            developerPayload: { type: "str", required: false }
+            appUserId: { type: "str", required: false }
+            platform: { type: "str", required: true }
+
       full_refund:
         title: "Полный возврат средств"
         http_method: "PATCH"

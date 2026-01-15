@@ -1,0 +1,7 @@
+{
+  "productCode": "10_flashlights",
+  "quantity": 1,
+  "orderId": "xxxx111",
+  "appUserId": "molkov_test",
+  "platform": "desktop"
+}
