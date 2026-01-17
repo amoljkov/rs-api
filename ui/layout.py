@@ -1,7 +1,10 @@
-# Layout constants / helpers (kept separate to stop layout regressions)
+# UI layout constants (single-tab, three panes)
 
-RIGHT_SPLIT_UPPER_MINSIZE = 520
-RIGHT_SPLIT_LOWER_MINSIZE = 200
+LEFT_PANE_MINSIZE = 360
+PARAMS_PANE_MINSIZE = 420
+RESPONSE_PANE_MINSIZE = 520
 
-# Absolute initial sash position (pixels). This is the most stable across DPI/scaling.
-RIGHT_SPLIT_SASH_START = 600
+DEFAULT_GEOMETRY = "1480x880"
+
+# Body editor default height (in text lines)
+BODY_TEXT_HEIGHT = 8

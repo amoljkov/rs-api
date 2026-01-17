@@ -5,19 +5,23 @@ import ttkbootstrap.scrolled as scrolled
 from ui.clipboard import bind_clipboard_shortcuts, add_context_menu
 
 
-def make_scrolled_text(parent, *, wrap_mode: str = "word"):
+def make_scrolled_text_both(parent, *, wrap_mode: str = "none"):
     """
-    ttkbootstrap ScrolledText is a Frame wrapper around a real tk.Text widget.
-    We return (frame, text_widget) to keep .get/.insert logic stable.
-    Scrollbars autohide => no visual noise when there's nothing to scroll.
+    Scrolled Text with BOTH vertical and horizontal scrollbars (always available),
+    so long lines are readable and selectable.
+    Returns (frame, text_widget).
     """
-    frame = scrolled.ScrolledText(parent, autohide=True, wrap=wrap_mode)
+    frame = ttk.Frame(parent)
 
-    # ttkbootstrap keeps real Text widget inside `frame.text`
-    text = getattr(frame, "text", None)
-    if text is None:
-        # fallback (shouldn't happen, but safe)
-        text = frame
+    text = tk.Text(frame, wrap=wrap_mode)
+    ybar = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+    xbar = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
+
+    text.configure(yscrollcommand=ybar.set, xscrollcommand=xbar.set)
+
+    ybar.pack(side="right", fill="y")
+    xbar.pack(side="bottom", fill="x")
+    text.pack(side="left", fill="both", expand=True)
 
     bind_clipboard_shortcuts(text)
     add_context_menu(text)
@@ -38,7 +42,7 @@ def make_scrolled_treeview(parent):
     tree.configure(yscrollcommand=ybar.set, xscrollcommand=xbar.set)
 
     # Critical fix: prevent stretching of column #0 so X scrollbar actually works
-    tree.column("#0", width=520, minwidth=200, stretch=False)
+    tree.column("#0", width=520, minwidth=220, stretch=False)
 
     ybar.pack(side="right", fill="y")
     xbar.pack(side="bottom", fill="x")
@@ -49,18 +53,12 @@ def make_scrolled_treeview(parent):
 
 class ScrollFrame(scrolled.ScrolledFrame):
     """
-    ttkbootstrap ScrolledFrame has:
-      - content frame (self)
-      - outer container frame: self.container
-
-    IMPORTANT:
-      When adding to Notebook / PanedWindow, you must use `.container`
-      (docs explicitly mention this). :contentReference[oaicite:1]{index=1}
-
-    We also create `inner` with padding so labels/inputs don't stick to edges.
+    Compact scrollable area for parameters, with autohide scrollbar (less noise).
+    Note: to embed in PanedWindow/Notebook, use `.container`.
     """
 
     def __init__(self, parent):
         super().__init__(parent, autohide=True)
+        # Padding so content doesn't stick to edges
         self.inner = ttk.Frame(self, padding=(12, 10))
         self.inner.pack(fill="both", expand=True)

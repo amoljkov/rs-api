@@ -11,15 +11,17 @@ from rustore.token_manager import RuStoreTokenManager
 from rustore.api_client import RuStoreApiClient
 from rustore.methods import load_all, list_methods, MethodDef
 
-from ui.widgets import make_scrolled_text, make_scrolled_treeview, ScrollFrame
+from ui.widgets import make_scrolled_text_both, make_scrolled_treeview, ScrollFrame
 from ui.clipboard import bind_clipboard_shortcuts, add_context_menu
 from ui.tooltips import Tooltip
 from ui.body_template import build_body_template, parse_typed
 from ui.logger_adapter import UiLogger
 from ui.layout import (
-    RIGHT_SPLIT_UPPER_MINSIZE,
-    RIGHT_SPLIT_LOWER_MINSIZE,
-    RIGHT_SPLIT_SASH_START,
+    LEFT_PANE_MINSIZE,
+    PARAMS_PANE_MINSIZE,
+    RESPONSE_PANE_MINSIZE,
+    DEFAULT_GEOMETRY,
+    BODY_TEXT_HEIGHT,
 )
 
 
@@ -28,11 +30,11 @@ class MainWindow(tb.Window):
         # Theme is intentionally hardcoded.
         # Available light themes you can try:
         # cosmo, flatly, journal, litera, lumen, minty, pulse, sandstone,
-        # simplex, united, yeti, morph  :contentReference[oaicite:2]{index=2}
+        # simplex, united, yeti, morph
         super().__init__(themename="flatly")
 
         self.title("RuStore Public API Client")
-        self.geometry("1360x900")
+        self.geometry(DEFAULT_GEOMETRY)
 
         self.settings = get_settings()
 
@@ -59,12 +61,10 @@ class MainWindow(tb.Window):
         self._populate_methods_tree()
         self._on_method_change()
 
-        self.after(0, self._set_initial_sash)
-
     # ---------------- logging ----------------
     def log(self, msg: str):
-        self.log_view.insert(tk.END, str(msg) + "\n")
-        self.log_view.see(tk.END)
+        self.logs_text.insert(tk.END, str(msg) + "\n")
+        self.logs_text.see(tk.END)
 
     def _copy_text_widget_all(self, w: tk.Text):
         txt = w.get("1.0", tk.END).rstrip("\n")
@@ -72,81 +72,63 @@ class MainWindow(tb.Window):
         self.clipboard_append(txt)
         self.status.config(text="Скопировано целиком в буфер обмена")
 
-    # ---------------- layout ----------------
-    def _set_initial_sash(self):
-        try:
-            self.update_idletasks()
-            self.right_split.sashpos(0, RIGHT_SPLIT_SASH_START)
-        except Exception:
-            # fallback if tk throws in some cases
-            try:
-                self.right_split.sashpos(0, RIGHT_SPLIT_SASH_START)
-            except Exception:
-                pass
-
     # ---------------- UI build ----------------
     def _build_ui(self):
         root = ttk.PanedWindow(self, orient="horizontal")
         root.pack(fill="both", expand=True)
 
-        left = ttk.Frame(root, padding=(14, 14))
-        right = ttk.Frame(root, padding=(14, 14))
-        root.add(left, weight=1)
-        root.add(right, weight=5)
+        # ========== Pane 1: request selection ==========
+        pane_left = ttk.Frame(root, padding=(12, 12))
+        root.add(pane_left, weight=1)
+        try:
+            root.paneconfig(pane_left, minsize=LEFT_PANE_MINSIZE)
+        except Exception:
+            pass
 
-        # -------- Left (Sidebar) --------
-        ttk.Label(left, text="Окружение", font=("Segoe UI", 10, "bold")).pack(anchor="w")
-        env_box = ttk.Combobox(left, textvariable=self.env_var, values=["prod", "sandbox"], state="readonly")
-        env_box.pack(fill="x", pady=(6, 14))
+        ttk.Label(pane_left, text="Выбор запроса", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+
+        ttk.Label(pane_left, text="Окружение", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(10, 0))
+        env_box = ttk.Combobox(pane_left, textvariable=self.env_var, values=["prod", "sandbox"], state="readonly")
+        env_box.pack(fill="x", pady=(6, 10))
         env_box.bind("<<ComboboxSelected>>", lambda e: self._on_method_change())
 
-        ttk.Label(left, text="Методы", font=("Segoe UI", 10, "bold")).pack(anchor="w")
-        tree_frame, self.methods_tree = make_scrolled_treeview(left)
-        tree_frame.pack(fill="both", expand=True, pady=(6, 12))
+        ttk.Label(pane_left, text="Методы", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        tree_frame, self.methods_tree = make_scrolled_treeview(pane_left)
+        tree_frame.pack(fill="both", expand=True, pady=(6, 10))
         self.methods_tree.bind("<<TreeviewSelect>>", lambda e: self._on_tree_select())
 
-        ttk.Button(left, text="Обновить токен", bootstyle="secondary", command=self._force_refresh_token).pack(fill="x")
-
-        # -------- Right header --------
-        header = ttk.Frame(right)
-        header.pack(fill="x", pady=(0, 10))
-
-        self.method_info = ttk.Label(
-            header,
-            text="",
-            justify="left",
-            font=("Segoe UI", 10),
+        ttk.Button(pane_left, text="Обновить токен", bootstyle="secondary", command=self._force_refresh_token).pack(
+            fill="x", pady=(0, 6)
         )
-        self.method_info.pack(anchor="w")
 
-        # -------- Right split --------
-        self.right_split = tk.PanedWindow(right, orient="vertical", sashrelief="raised")
-        self.right_split.pack(fill="both", expand=True)
+        # ========== Pane 2: request params (single compact block) ==========
+        pane_params = ttk.Frame(root, padding=(12, 12))
+        root.add(pane_params, weight=1)
+        try:
+            root.paneconfig(pane_params, minsize=PARAMS_PANE_MINSIZE)
+        except Exception:
+            pass
 
-        upper = ttk.Frame(self.right_split)
-        lower = ttk.Frame(self.right_split)
+        # header (more noticeable)
+        self.method_title = ttk.Label(pane_params, text="", font=("Segoe UI", 11, "bold"))
+        self.method_title.pack(anchor="w")
 
-        self.right_split.add(upper, minsize=RIGHT_SPLIT_UPPER_MINSIZE)
-        self.right_split.add(lower, minsize=RIGHT_SPLIT_LOWER_MINSIZE)
+        self.method_meta = ttk.Label(pane_params, text="", font=("Segoe UI", 10), justify="left")
+        self.method_meta.pack(anchor="w", pady=(2, 0))
 
-        # -------- Forms --------
-        forms = ttk.PanedWindow(upper, orient="horizontal")
-        forms.pack(fill="both", expand=True, pady=(8, 10))
+        # compact params area (scrollable)
+        params_box = ttk.Labelframe(pane_params, text="Параметры запроса", padding=(10, 8))
+        params_box.pack(fill="both", expand=True, pady=(10, 10))
 
-        self.path_frame = ScrollFrame(forms)
-        self.query_frame = ScrollFrame(forms)
+        self.params_scroll = ScrollFrame(params_box)
+        # IMPORTANT: ScrolledFrame add `.container` to pack/grid
+        self.params_scroll.container.pack(fill="both", expand=True)
 
-        # IMPORTANT: ttkbootstrap ScrolledFrame must be added via `.container` in PanedWindow :contentReference[oaicite:3]{index=3}
-        forms.add(self.path_frame.container, weight=1)
-        forms.add(self.query_frame.container, weight=1)
-
-        # -------- BODY --------
-        body_box = ttk.Labelframe(upper, text="BODY (JSON)", padding=(10, 8))
-        body_box.pack(fill="x", pady=(0, 12))
-
-        body_frame, self.body_text = make_scrolled_text(body_box, wrap_mode="word")
-        body_frame.pack(fill="x")
-        self.body_text.configure(height=7)
+        # BODY (inside params block, but shown only when needed)
+        self.body_label = ttk.Label(self.params_scroll.inner, text="BODY (JSON)", font=("Segoe UI", 10, "bold"))
+        body_frame, self.body_text = make_scrolled_text_both(self.params_scroll.inner, wrap_mode="none")
+        self.body_frame = body_frame
+        self.body_text.configure(height=BODY_TEXT_HEIGHT)
 
         def on_body_modified(_e=None):
             self.body_text.edit_modified(False)
@@ -155,9 +137,9 @@ class MainWindow(tb.Window):
         self.body_text.bind("<<Modified>>", on_body_modified, add=True)
         self.body_text.edit_modified(False)
 
-        # -------- Call row --------
-        call_row = ttk.Frame(upper)
-        call_row.pack(fill="x", pady=(0, 10))
+        # call row
+        call_row = ttk.Frame(pane_params)
+        call_row.pack(fill="x")
 
         ttk.Button(call_row, text="Вызвать метод", bootstyle="primary", command=self._call_clicked).pack(side="left")
         ttk.Checkbutton(
@@ -167,58 +149,58 @@ class MainWindow(tb.Window):
             bootstyle="round-toggle",
         ).pack(side="left", padx=14)
 
-        # -------- Lower: Response + Logs --------
-        resp = ttk.Labelframe(lower, text="Ответ / Логи", padding=(10, 8))
-        resp.pack(fill="both", expand=True, pady=(6, 0))
+        # ========== Pane 3: response ==========
+        pane_resp = ttk.Frame(root, padding=(12, 12))
+        root.add(pane_resp, weight=4)
+        try:
+            root.paneconfig(pane_resp, minsize=RESPONSE_PANE_MINSIZE)
+        except Exception:
+            pass
 
-        resp_toolbar = ttk.Frame(resp)
-        resp_toolbar.pack(fill="x", pady=(4, 6))
+        ttk.Label(pane_resp, text="Ответ", font=("Segoe UI", 11, "bold")).pack(anchor="w")
 
-        # We'll attach these buttons to response area (not params)
+        resp_box = ttk.Labelframe(pane_resp, text="Ответ / Логи", padding=(10, 8))
+        resp_box.pack(fill="both", expand=True, pady=(10, 10))
+
+        # toolbar
+        resp_toolbar = ttk.Frame(resp_box)
+        resp_toolbar.pack(fill="x", pady=(0, 8))
+
         ttk.Button(
-            resp_toolbar,
-            text="Copy Pretty",
-            bootstyle="secondary-outline",
-            command=lambda: self._copy_text_widget_all(self.pretty_view),
+            resp_toolbar, text="Copy Pretty", bootstyle="secondary-outline",
+            command=lambda: self._copy_text_widget_all(self.pretty_text)
         ).pack(side="right", padx=6)
 
         ttk.Button(
-            resp_toolbar,
-            text="Copy Raw",
-            bootstyle="secondary-outline",
-            command=lambda: self._copy_text_widget_all(self.raw_view),
+            resp_toolbar, text="Copy Raw", bootstyle="secondary-outline",
+            command=lambda: self._copy_text_widget_all(self.raw_text)
         ).pack(side="right")
 
-        self.resp_tabs = ttk.Notebook(resp)
-        self.resp_tabs.pack(fill="both", expand=True, pady=(2, 6))
+        ttk.Button(
+            resp_toolbar, text="Copy Logs", bootstyle="secondary-outline",
+            command=lambda: self._copy_text_widget_all(self.logs_text)
+        ).pack(side="right", padx=6)
 
-        pretty_frame, self.pretty_view = make_scrolled_text(self.resp_tabs, wrap_mode="word")
-        raw_frame, self.raw_view = make_scrolled_text(self.resp_tabs, wrap_mode="none")
-        logs_frame, self.log_view = make_scrolled_text(self.resp_tabs, wrap_mode="none")
+        ttk.Button(
+            resp_toolbar, text="Clear Logs", bootstyle="secondary-outline",
+            command=lambda: self.logs_text.delete("1.0", tk.END)
+        ).pack(side="right")
+
+        # response tabs inside right block (still in one main tab)
+        self.resp_tabs = ttk.Notebook(resp_box)
+        self.resp_tabs.pack(fill="both", expand=True)
+
+        pretty_frame, self.pretty_text = make_scrolled_text_both(self.resp_tabs, wrap_mode="none")
+        raw_frame, self.raw_text = make_scrolled_text_both(self.resp_tabs, wrap_mode="none")
+        logs_frame, self.logs_text = make_scrolled_text_both(self.resp_tabs, wrap_mode="none")
 
         self.resp_tabs.add(pretty_frame, text="Pretty")
         self.resp_tabs.add(raw_frame, text="Raw")
         self.resp_tabs.add(logs_frame, text="Logs")
 
-        log_btn_row = ttk.Frame(resp)
-        log_btn_row.pack(fill="x", pady=(0, 6))
-
-        ttk.Button(
-            log_btn_row,
-            text="Clear logs",
-            bootstyle="secondary-outline",
-            command=lambda: self.log_view.delete("1.0", tk.END),
-        ).pack(side="left")
-
-        ttk.Button(
-            log_btn_row,
-            text="Copy logs",
-            bootstyle="secondary-outline",
-            command=lambda: self._copy_text_widget_all(self.log_view),
-        ).pack(side="left", padx=8)
-
-        self.status = ttk.Label(right, text="", anchor="w", foreground="#555")
-        self.status.pack(fill="x", side="bottom", pady=(10, 0))
+        # status bar
+        self.status = ttk.Label(self, text="", anchor="w", foreground="#555")
+        self.status.pack(fill="x", side="bottom")
 
     # ---------------- methods tree ----------------
     def _populate_methods_tree(self):
@@ -273,43 +255,39 @@ class MainWindow(tb.Window):
         except Exception as e:
             messagebox.showerror("Ошибка", str(e))
 
-    def _clear_frame(self, frame: ttk.Frame):
+    def _clear_container(self, frame: ttk.Frame):
         for w in frame.winfo_children():
             w.destroy()
 
-    def _render_param_form(self, parent_inner: ttk.Frame, title: str, schema: dict, store: dict):
-        self._clear_frame(parent_inner)
-        store.clear()
-
-        ttk.Label(parent_inner, text=title, font=("Segoe UI", 10, "bold")).grid(
-            row=0, column=0, sticky="w", pady=(0, 10), columnspan=2
+    def _render_kv_section(self, parent: ttk.Frame, title: str, schema: dict, store: dict):
+        """
+        Render PATH or QUERY fields into parent as a compact section.
+        Only called when schema is non-empty.
+        """
+        ttk.Label(parent, text=title, font=("Segoe UI", 10, "bold")).grid(
+            row=self._grid_row, column=0, sticky="w", pady=(8, 6), columnspan=2
         )
+        self._grid_row += 1
 
-        r = 1
         for name, meta in (schema or {}).items():
             t = (meta.get("type") or "str")
             req = bool(meta.get("required", False))
             hint = (meta.get("hint") or "").strip()
 
             label = f"{name} ({t})" + (" *" if req else "")
-            ttk.Label(parent_inner, text=label).grid(row=r, column=0, sticky="w", padx=(0, 10), pady=6)
+            ttk.Label(parent, text=label).grid(row=self._grid_row, column=0, sticky="w", padx=(0, 10), pady=4)
 
-            e = ttk.Entry(parent_inner)
-            e.grid(row=r, column=1, sticky="ew", pady=6)
-            parent_inner.grid_columnconfigure(1, weight=1)
+            e = ttk.Entry(parent)
+            e.grid(row=self._grid_row, column=1, sticky="ew", pady=4)
+            parent.grid_columnconfigure(1, weight=1)
 
             bind_clipboard_shortcuts(e)
             add_context_menu(e)
-
             if hint:
                 Tooltip(e, hint)
 
             store[name] = (e, meta)
-            r += 1
-
-        ttk.Label(parent_inner, text="* обязательные", foreground="#666").grid(
-            row=r, column=0, sticky="w", pady=(10, 0), columnspan=2
-        )
+            self._grid_row += 1
 
     def _on_method_change(self):
         m = self._selected_method()
@@ -320,33 +298,83 @@ class MainWindow(tb.Window):
         path = (m.paths or {}).get(env, "")
         full = f"{self.settings.base_url}{path}"
 
-        self.method_info.config(
-            text=f"{m.title}\nHTTP: {m.http_method}    Path ({env}): {path}\nURL: {full}"
-        )
+        # Header in params pane: more noticeable
+        self.method_title.config(text=m.title)
+        self.method_meta.config(text=f"{m.http_method}  {path}\n{full}")
 
-        self._render_param_form(self.path_frame.inner, "PATH параметры", (m.params.get("path") or {}), self.path_entries)
-        self._render_param_form(self.query_frame.inner, "QUERY параметры", (m.params.get("query") or {}), self.query_entries)
+        # Rebuild params UI compactly
+        self._clear_container(self.params_scroll.inner)
+        self.path_entries.clear()
+        self.query_entries.clear()
 
-        sel = self.methods_tree.selection()
-        current_iid = sel[0] if sel else None
-        method_changed = (current_iid != self._current_method_iid)
+        self._grid_row = 0
 
-        if method_changed:
-            self._current_method_iid = current_iid
-            self._body_dirty = False
-
+        path_schema = (m.params.get("path") or {})
+        query_schema = (m.params.get("query") or {})
         body_schema = (m.params.get("body") or {})
-        if not self._body_dirty:
-            template = build_body_template(body_schema)
-            self.body_text.delete("1.0", tk.END)
-            self.body_text.insert("1.0", json.dumps(template, ensure_ascii=False, indent=2))
+
+        has_path = bool(path_schema)
+        has_query = bool(query_schema)
+        has_body = bool(body_schema)
+
+        if has_path:
+            self._render_kv_section(self.params_scroll.inner, "PATH", path_schema, self.path_entries)
+
+        if has_query:
+            self._render_kv_section(self.params_scroll.inner, "QUERY", query_schema, self.query_entries)
+
+        # Body section: show only when schema exists
+        if has_body:
+            ttk.Separator(self.params_scroll.inner).grid(row=self._grid_row, column=0, columnspan=2, sticky="ew", pady=(10, 10))
+            self._grid_row += 1
+
+            self.body_label = ttk.Label(self.params_scroll.inner, text="BODY (JSON)", font=("Segoe UI", 10, "bold"))
+            self.body_label.grid(row=self._grid_row, column=0, sticky="w", pady=(0, 6), columnspan=2)
+            self._grid_row += 1
+
+            self.body_frame, self.body_text = make_scrolled_text_both(self.params_scroll.inner, wrap_mode="none")
+            self.body_frame.grid(row=self._grid_row, column=0, columnspan=2, sticky="ew")
+            self.body_text.configure(height=BODY_TEXT_HEIGHT)
+            self.params_scroll.inner.grid_columnconfigure(1, weight=1)
+            self._grid_row += 1
+
+            # Track edits
+            def on_body_modified(_e=None):
+                self.body_text.edit_modified(False)
+                self._body_dirty = True
+
+            self.body_text.bind("<<Modified>>", on_body_modified, add=True)
             self.body_text.edit_modified(False)
 
-        self.pretty_view.delete("1.0", tk.END)
-        self.raw_view.delete("1.0", tk.END)
-        self.status.config(text="")
+            # Fill template only when switching method
+            sel = self.methods_tree.selection()
+            current_iid = sel[0] if sel else None
+            method_changed = (current_iid != self._current_method_iid)
+            if method_changed:
+                self._current_method_iid = current_iid
+                self._body_dirty = False
 
-        self.after(0, self._set_initial_sash)
+            if not self._body_dirty:
+                template = build_body_template(body_schema)
+                self.body_text.delete("1.0", tk.END)
+                self.body_text.insert("1.0", json.dumps(template, ensure_ascii=False, indent=2))
+                self.body_text.edit_modified(False)
+        else:
+            # no body for this method
+            self._current_method_iid = self.methods_tree.selection()[0] if self.methods_tree.selection() else None
+            self._body_dirty = False
+
+        # Compact note for required
+        if has_path or has_query:
+            ttk.Label(self.params_scroll.inner, text="* обязательные", foreground="#666").grid(
+                row=self._grid_row, column=0, sticky="w", pady=(10, 0), columnspan=2
+            )
+            self._grid_row += 1
+
+        # Clear response panes
+        self.pretty_text.delete("1.0", tk.END)
+        self.raw_text.delete("1.0", tk.END)
+        self.status.config(text="")
 
     def _collect_params(self, store: dict, section_name: str):
         values = {}
@@ -393,16 +421,20 @@ class MainWindow(tb.Window):
             messagebox.showerror("Не заполнено", "Обязательные поля:\n" + "\n".join(missing))
             return
 
-        body_raw = self.body_text.get("1.0", tk.END).strip()
-        try:
-            body = json.loads(body_raw) if body_raw else {}
-        except Exception as e:
-            messagebox.showerror("BODY JSON некорректен", str(e))
-            return
+        body = None
+        # if body editor exists for this method, read it
+        if hasattr(self, "body_text") and self.body_text.winfo_exists():
+            body_raw = self.body_text.get("1.0", tk.END).strip()
+            if body_raw:
+                try:
+                    body = json.loads(body_raw)
+                except Exception as e:
+                    messagebox.showerror("BODY JSON некорректен", str(e))
+                    return
 
         self.status.config(text="Выполняю запрос... (см. Logs)")
-        self.pretty_view.delete("1.0", tk.END)
-        self.raw_view.delete("1.0", tk.END)
+        self.pretty_text.delete("1.0", tk.END)
+        self.raw_text.delete("1.0", tk.END)
 
         def worker():
             try:
@@ -428,15 +460,17 @@ class MainWindow(tb.Window):
         except Exception:
             parsed = None
 
-        header_block = "=== RESPONSE HEADERS ===\n" + json.dumps(dict(resp.headers), ensure_ascii=False, indent=2) + "\n\n"
+        headers = json.dumps(dict(resp.headers), ensure_ascii=False, indent=2)
+        header_block = "=== RESPONSE HEADERS ===\n" + headers + "\n\n"
 
         if self.pretty_var.get() and parsed is not None:
             pretty_out = json.dumps(parsed, ensure_ascii=False, indent=2)
         else:
             pretty_out = text
 
-        self.pretty_view.insert("1.0", header_block + pretty_out)
-        self.raw_view.insert("1.0", header_block + text)
+        self.pretty_text.insert("1.0", header_block + pretty_out)
+        self.raw_text.insert("1.0", header_block + text)
+        self.resp_tabs.select(0)
 
     def _show_error(self, e: Exception):
         self.status.config(text="Ошибка запроса (см. Logs)")
